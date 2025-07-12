@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react"
 import { assets } from "../assets/assets"
-import { useNavigate, useParams } from "react-router-dom"
+import { useParams } from "react-router-dom"
 import { ArrowRightIcon, ClockIcon } from "lucide-react"
 import isoTimeFormat from "../lib/iosTimeFormat"
 import Loading from "../components/Loading"
@@ -16,8 +16,6 @@ const SeatLayout = () => {
   const [selectedTime, setSelectedTime] = useState(null)
   const [show, setShow] = useState(null)
   const [occupiedSeats, setOccupiedSeats] = useState([])
-
-  const navigate = useNavigate()
 
   const { axios, getToken, user } = useAppContext()
 
