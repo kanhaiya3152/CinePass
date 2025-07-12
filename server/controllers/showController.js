@@ -116,7 +116,7 @@ export const addShow = async (req, res) => {
 
         res.status(201).json({ success: true, message: "Show added successfully" });
     } catch (error) {
-        console.error("❌ Error in addShow:", error.message);
+        console.error("Error in addShow:", error.message);
         res.status(500).json({ success: false, message: "Internal Server Error" });
     }
 };
