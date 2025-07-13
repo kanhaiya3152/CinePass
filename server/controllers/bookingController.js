@@ -57,7 +57,7 @@ export const createBooking = async (req, res) => {
 
         // create line items for stripe
         const line_items = [{
-            price_data:{
+            price_data: {
                 currency: 'usd',
                 product_data: {
                     name: showData.movie.title
@@ -68,18 +68,27 @@ export const createBooking = async (req, res) => {
         }]
 
         const session = await stripeInstance.checkout.sessions.create({
-            success_url: `${origin}/loading/my-bookings` , // origin -> frontend url
-            cancel_url: `${origin}/my-bookings` ,
+            success_url: `${origin}/loading/my-bookings`, // origin -> frontend url
+            cancel_url: `${origin}/my-bookings`,
             line_items: line_items,
             mode: 'payment',
             metadata: {
                 bookingId: booking._id.toString()
             },
-            expires_at: Math.floor(Date.now()/1000) + 30 * 60, // Expires in 30 min
+            expires_at: Math.floor(Date.now() / 1000) + 30 * 60, // Expires in 30 min
         })
 
         booking.paymentLink = session.url
         await booking.save()  // save to db
+
+        // Run Inngest Sheduler Function to check payment status after 10 minutes
+        await inngest.send({
+            name: "app/checkpayment",
+            data: {
+                bookingId: booking._id.toString()
+
+            }
+        })
 
         res.json({ success: true, url: session.url });
 
