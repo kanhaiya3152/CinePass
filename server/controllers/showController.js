@@ -1,6 +1,7 @@
 import axios from "axios";
 import Movie from "../models/Movie.js";
 import Show from "../models/Show.js";
+import { inngest } from "../inngest/index.js";
 
 const TRAKT_CLIENT_ID = process.env.TRAKT_CLIENT_ID;
 const OMDB_KEY = process.env.OMDB_KEY;
@@ -113,6 +114,12 @@ export const addShow = async (req, res) => {
         if (showsToCreate.length > 0) {
             await Show.insertMany(showsToCreate);
         }
+
+        // Trigger inngest event
+        await inngest.send({
+            name:"app/show.added",
+            data:{movieTitle: movie.title}
+        })
 
         res.status(201).json({ success: true, message: "Show added successfully" });
     } catch (error) {
