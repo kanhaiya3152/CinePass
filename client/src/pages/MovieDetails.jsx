@@ -75,7 +75,7 @@ const MovieDetails = () => {
           </p>
 
           <p>
-            {timeFormat(show.movie.runtime)} | {show.movie.genres.map(genre => genre.name).join(", ")} | {show.movie.release_date.split("-")[0]}
+            {timeFormat(show.movie.runtime)} | {show.movie.release_date.split("-")[0]}
           </p>
 
           <div className='flex items-center flex-wrap gap-4 mt-4'>
@@ -89,18 +89,6 @@ const MovieDetails = () => {
                  movie._id===id ) ? "fill-primary text-primary" : ""}`} />
             </button>
           </div>
-        </div>
-      </div>
-
-      <p className='text-lg font-medium mt-20'>Your Favorite Cast</p>
-      <div className='overflow-x-auto no-scrollbar mt-8 pb-4'>
-        <div className='flex items-center gap-4 w-max px-4'>
-          {show.movie.casts.slice(0, 12).map((cast, index) => (
-            <div key={index} className='flex flex-col items-center text-center'>
-              <img src={cast.profile_path} alt="" className='rounded-full h-20 md:h-20 aspect-square object-cover' />
-              <p className='font-medium text-xs mt-3'>{cast.name}</p>
-            </div>
-          ))}
         </div>
       </div>
 
