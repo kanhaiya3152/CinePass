@@ -1,6 +1,6 @@
 # 🎟️ CinePass - Movie Ticket Booking App
 
-CinePass is a full-featured **movie ticket booking application** that allows users to browse trending movies, watch trailers, select show timings, and book tickets with secure payment and email confirmations. It features a powerful admin backend for managing shows and movies, all wrapped in a clean and responsive interface.
+CinePass is a full-featured **movie ticket booking application** that allows users to browse trending movies, watch trailers, select show timings, and book tickets with secure payment and email confirmations. The app features a powerful admin backend for managing shows and movies including adding new releases all wrapped in a clean and responsive interface. Users receive an email **immediately after booking** and an **automatic reminder email 8 hours before the movie starts**, ensuring they never miss a show.
 
 ## 🚀 Features
 
