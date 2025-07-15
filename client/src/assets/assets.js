@@ -1,5 +1,5 @@
 import logo from './logo.svg'
-import lgo from './logo.svg'
+import lgo from './lgo.svg'
 import marvelLogo from './marvelLogo.svg'
 import googlePlay from './googlePlay.svg'
 import appStore from './appStore.svg'
