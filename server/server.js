@@ -13,7 +13,7 @@ import { stripeWebhooks } from './controllers/stripeWebhooks.js';
 
 
 const app = express(); 
-const port = 3000;
+const port = process.env.PORT || 5000;
 
 // stripe webhooks Router
 app.use('/api/stripe', express.raw({type:'application/json'}), stripeWebhooks)
@@ -34,6 +34,6 @@ app.use('/api/booking', bookingRouter)
 app.use('/api/admin', adminRouter)
 app.use('/api/user', userRouter)
 
-app.listen(port, () => 
+app.listen(port, "0.0.0.0", () => 
     console.log(`Server running at http://localhost:${port}`)
 )
