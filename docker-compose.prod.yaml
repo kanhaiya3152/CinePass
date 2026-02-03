@@ -1,0 +1,38 @@
+services:
+  server:
+    image: kanhaiya25/cinepass-server:latest
+    ports:
+      - "5000:5000"
+    env_file:
+      - ./server/.env
+    networks:
+      - cinepass-network
+    depends_on:
+      - database
+
+  client:
+    image: kanhaiya25/cinepass-client:latest
+    ports:
+      - "5173:5173"
+    networks:
+      - cinepass-network
+
+  database:
+    image: mongo:8.0.3
+    ports:
+      - "27017:27017"
+    env_file:
+      - ./server/.env
+    networks:
+      - cinepass-network
+    volumes:
+      - mongo-data:/data/db
+    restart: unless-stopped
+
+networks:
+  chatzy-network:
+    driver: bridge
+
+volumes:
+  mongo-data:
+    driver: local
