@@ -20,7 +20,7 @@ CinePass is a full-featured **movie ticket booking application** that allows use
 ## 🛠️ Tech Stack
 
 ### 🌐 Frontend
-- **Framework**: React-Native
+- **Framework**: React
 - **Styling**: Tailwind CSS
 - **Routing**: React Router Dom
 - **Authentication**: Clerk
