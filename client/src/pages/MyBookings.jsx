@@ -5,6 +5,8 @@ import BlurCircle from "../components/BlurCircle"
 import { dateFormat } from "../lib/dateFormat"
 import { useAppContext } from "../context/AppContext"
 import { Link } from "react-router-dom"
+import { QRCodeSVG } from "qrcode.react"
+import { QrCode, X } from "lucide-react"
 
 const MyBookings = () => {
   const currency = import.meta.env.VITE_CURRENCY
@@ -13,16 +15,15 @@ const MyBookings = () => {
 
   const [bookings, setBookings] = useState([])
   const [isLoading, setIsLoading] = useState(true)
+  const [activeQR, setActiveQR] = useState(null) // bookingId of currently shown QR
 
   const getMyBookings = async () => {
     try {
       const token = await getToken();
-
-      const {data} = await axios.get('/api/user/bookings', {
-         headers: { Authorization: `Bearer ${token}` }
+      const { data } = await axios.get('/api/user/bookings', {
+        headers: { Authorization: `Bearer ${token}` }
       })
-
-      if(data.success){
+      if (data.success) {
         setBookings(data.bookings)
       }
     } catch (error) {
@@ -32,7 +33,7 @@ const MyBookings = () => {
   }
 
   useEffect(() => {
-    if(user){
+    if (user) {
       getMyBookings()
     }
   }, [user])
@@ -45,6 +46,11 @@ const MyBookings = () => {
       </div>
 
       <h1 className='text-lg font-semibold mb-4'>My Bookings</h1>
+
+      {bookings.length === 0 && (
+        <p className="text-gray-400 text-sm">No bookings yet. Go book a movie!</p>
+      )}
+
       {bookings.map((item, index) => (
         <div key={index} className='flex flex-col md:flex-row justify-between bg-primary/8 border border-primary/20 rounded-lg mt-4 p-2 max-w-3xl'>
           <div className='flex flex-col md:flex-row'>
@@ -52,26 +58,57 @@ const MyBookings = () => {
             <div className='flex flex-col p-4'>
               <p className='text-lg font-semibold'>{item.show.movie.title}</p>
               <p className='text-gray-400 text-sm'>{timeFormat(item.show.movie.runtime)}</p>
-              <p className='text-gray-400 text-sm mt-auto'>{dateFormat(item.show.showDateTime)}
-              </p>
+              <p className='text-gray-400 text-sm mt-auto'>{dateFormat(item.show.showDateTime)}</p>
             </div>
-
           </div>
 
-          <div className='flex flex-col md: items-end md:text-right justify-between p-4'>
+          <div className='flex flex-col md:items-end md:text-right justify-between p-4'>
             <div className='flex items-center gap-4'>
               <p className='text-2xl font-semibold mb-3'>{currency}{item.amount}</p>
-              {!item.isPaid && <Link to={item.paymentLink} className='bg-primary px-4 py-1.5 mb-3 text-sm rounded-full font-medium cursor-pointer'>Pay Now</Link>}
+              {!item.isPaid && (
+                <Link to={item.paymentLink} className='bg-primary px-4 py-1.5 mb-3 text-sm rounded-full font-medium cursor-pointer'>
+                  Pay Now
+                </Link>
+              )}
             </div>
             <div className='text-sm'>
               <p><span>Total Tickets:</span> {item.bookedSeats.length}</p>
               <p><span>Seat Number:</span> {item.bookedSeats.join(", ")}</p>
             </div>
+
+            {/* QR Code Button — only for paid bookings */}
+            {item.isPaid && item.qrToken && (
+              <button
+                onClick={() => setActiveQR(activeQR === item._id ? null : item._id)}
+                className="mt-3 flex items-center gap-2 text-xs bg-primary/20 hover:bg-primary/30 border border-primary/40 text-primary px-3 py-1.5 rounded-full transition cursor-pointer"
+              >
+                <QrCode className="w-4 h-4" />
+                {activeQR === item._id ? 'Hide Ticket QR' : 'Show Ticket QR'}
+              </button>
+            )}
+
+            {/* QR Code Display */}
+            {activeQR === item._id && item.qrToken && (
+              <div className="mt-3 p-4 bg-white rounded-xl flex flex-col items-center gap-2 shadow-lg">
+                <QRCodeSVG
+                  value={item.qrToken}
+                  size={160}
+                  bgColor="#ffffff"
+                  fgColor="#000000"
+                  level="H"
+                />
+                <p className="text-black text-xs font-medium text-center mt-1">
+                  {item.show.movie.title}
+                </p>
+                <p className="text-gray-500 text-[10px] text-center">
+                  Show this QR at the entrance
+                </p>
+              </div>
+            )}
           </div>
         </div>
       ))}
     </div>
-
   ) : (
     <Loading />
   )

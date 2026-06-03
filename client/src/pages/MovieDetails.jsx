@@ -74,6 +74,7 @@ const MovieDetails = () => {
             {show.movie.overview}
           </p>
 
+
           <p>
             {timeFormat(show.movie.runtime)} | {show.movie.release_date.split("-")[0]}
           </p>

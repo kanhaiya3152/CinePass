@@ -145,8 +145,23 @@ const SeatLayout = () => {
           </div>
         </div>
 
+        {selectedTime && (
+          <div className="mt-8 flex flex-col items-center">
+            <p className="text-gray-300">
+              Total Amount: <span className="text-xl font-bold text-white">₹{(selectedTime.price * selectedSeats.length) || 0}</span>
+              {selectedSeats.length > 0 && <span className="text-sm text-gray-400 ml-2">(₹{selectedTime.price} per seat)</span>}
+            </p>
+            {/* Dynamic Pricing Badge Logic based on time and occupied seats (mocking logic here for UI) */}
+            {occupiedSeats.length / 90 > 0.8 ? (
+                <span className="mt-2 text-xs bg-red-500/20 text-red-500 px-2 py-1 rounded border border-red-500/50">🔥 High Demand</span>
+            ) : occupiedSeats.length / 90 < 0.2 && (new Date(selectedTime.time).getTime() - Date.now() < 4 * 60 * 60 * 1000) ? (
+                <span className="mt-2 text-xs bg-green-500/20 text-green-500 px-2 py-1 rounded border border-green-500/50">⚡ Flash Sale</span>
+            ) : null}
+          </div>
+        )}
+
         <button onClick={bookTickets} className='flex
-          items-center gap-1 mt-20 px-10 py-3 text-sm bg-primary
+          items-center gap-1 mt-4 px-10 py-3 text-sm bg-primary
         hover:bg-primary-dull transition rounded-full font-medium cursor-pointer
           active:scale-95'>
           Proceed to Checkout

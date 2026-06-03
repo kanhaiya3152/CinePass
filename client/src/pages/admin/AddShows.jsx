@@ -20,13 +20,37 @@ const AddShows = () => {
 
     const fetchingNowPlayingMovies = async () => {
         try {
-            const { data } = await axios.get('/api/show/now-playing', {
-                headers: { Authorization: `Bearer ${await getToken()}` }
-            })
+            const token = await getToken();
+            const [tmdbRes, dbRes] = await Promise.all([
+                axios.get('/api/show/now-playing', { headers: { Authorization: `Bearer ${token}` } }),
+                axios.get('/api/show/movies')
+            ]);
 
-            if (data.success) {
-                setNowPlayingMovies(data.movies)
+            let combinedMovies = [];
+            
+            // First add movies already in DB
+            if (dbRes.data.success) {
+                // Map DB movies to match TMDB format expected by the UI
+                const dbMovies = dbRes.data.movies.map(m => ({
+                    id: m._id,
+                    title: m.title,
+                    poster_path: m.poster_path,
+                    vote_average: m.vote_average,
+                    release_date: m.release_date,
+                    vote_count: 0,
+                    isExisting: true // badge to show it's already in DB
+                }));
+                combinedMovies = [...dbMovies];
             }
+
+            // Then add TMDB movies (avoiding duplicates)
+            if (tmdbRes.data.success) {
+                const existingIds = new Set(combinedMovies.map(m => m.id));
+                const tmdbMovies = tmdbRes.data.movies.filter(m => !existingIds.has(m.id));
+                combinedMovies = [...combinedMovies, ...tmdbMovies];
+            }
+
+            setNowPlayingMovies(combinedMovies);
         } catch (error) {
             console.error("Error fetching movies", error)
         }
@@ -125,12 +149,16 @@ const AddShows = () => {
                                 </div>
                             </div>
                             {selectedMovie === movie.id && (
-                                <div className="absolute top-2 right-2 flex items-center justify-center bg-primary h-6 w-6 rounded">
-                                    <CheckIcon className="w-4 h-4 text-white" strokeWidth=
-                                        {2.5} />
+                                <div className="absolute top-2 right-2 flex items-center justify-center bg-primary h-6 w-6 rounded z-10">
+                                    <CheckIcon className="w-4 h-4 text-white" strokeWidth={2.5} />
                                 </div>
                             )}
-                            <p className="font-medium truncate">{movie.title}</p>
+                            {movie.isExisting && (
+                                <div className="absolute top-2 left-2 flex items-center justify-center bg-green-600/90 text-white text-[10px] px-2 py-0.5 rounded font-medium z-10">
+                                    In DB
+                                </div>
+                            )}
+                            <p className="font-medium truncate mt-2">{movie.title}</p>
                             <p className="text-gray-400 text-sm">{movie.release_date}</p>
                         </div>
                     ))}
@@ -154,7 +182,7 @@ const AddShows = () => {
                 <div className="inline-flex gap-5 border border-gray-600 p-1 pl-3 rounded-lg">
                     <input type="datetime-local" value={dateTimeInput} onChange={(e) =>
                         setDateTimeInput(e.target.value)} className="outline-none rounded-md" />
-                    <button onClick={handleDateTimeAdd} className="bg-primary/80
+                    <button onClick={handleDateTimeAdd} className="bg-primary/80 active:scale-95
                     text-white px-3 py-2 text-sm rounded-lg hover:bg-primary cursor-pointer" >
                         Add Time
                     </button>
@@ -182,7 +210,7 @@ const AddShows = () => {
                     </ul>
                 </div>
             )}
-            <button onClick={handleSubmit} disabled={addingShow} className="bg-primary text-white px-8 py-2 mt-6 rounded hover:bg-primary/90 transition-all cursor-pointer" >
+            <button onClick={handleSubmit} disabled={addingShow} className="bg-primary text-white px-8 py-2 mt-6 active:scale-95 rounded hover:bg-primary/90 transition-all cursor-pointer" >
                 Add Show
             </button>
         </>
