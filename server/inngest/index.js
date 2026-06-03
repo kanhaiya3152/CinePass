@@ -2,7 +2,9 @@ import { Inngest } from "inngest";
 import User from "../models/Users.js";
 import Booking from "../models/Booking.js";
 import Show from "../models/Show.js";
+import Movie from "../models/Movie.js";
 import sendEmail from "../configs/nodemailer.js";
+import axios from "axios";
 
 // Create a client to send and receive events
 export const inngest = new Inngest({ id: "movie-ticket-booking" });
@@ -228,6 +230,98 @@ const sendNewShowNotifications = inngest.createFunction(
     }
 )
 
+// Inngest Function to update dynamic pricing
+const updateDynamicPricing = inngest.createFunction(
+    { id: "update-dynamic-pricing" },
+    { cron: "0 * * * *" }, // Run every hour
+    async ({ step }) => {
+        await step.run("calculate-dynamic-prices", async () => {
+            const now = new Date();
+            const in24Hours = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+            const in4Hours = new Date(now.getTime() + 4 * 60 * 60 * 1000);
+
+            // Find all shows starting within the next 24 hours
+            const upcomingShows = await Show.find({
+                showDateTime: { $gte: now, $lte: in24Hours }
+            });
+
+            for (const show of upcomingShows) {
+                const totalSeats = 100; // Assuming 100 seats per theater
+                const occupiedCount = Object.keys(show.occupiedSeats || {}).length;
+                const capacity = occupiedCount / totalSeats;
+                let newPrice = show.showPrice;
+                let priceModified = false;
+
+                if (capacity > 0.8 && show.showDateTime <= in24Hours) {
+                    // High Demand: >80% full within 24 hours
+                    newPrice = show.showPrice * 1.10; // Increase by 10%
+                    priceModified = true;
+                } else if (capacity < 0.2 && show.showDateTime <= in4Hours) {
+                    // Flash Sale: <20% full within 4 hours
+                    newPrice = show.showPrice * 0.85; // Decrease by 15%
+                    priceModified = true;
+                }
+
+                if (priceModified && newPrice !== show.showPrice) {
+                    show.showPrice = Math.round(newPrice);
+                    await show.save();
+                }
+            }
+        });
+        return { message: "Dynamic pricing updated successfully" };
+    }
+)
+
+// Inngest Function to sync new movies daily
+const syncNewMovies = inngest.createFunction(
+    { id: "sync-new-movies" },
+    { cron: "0 0 * * *" }, // Run daily at midnight
+    async ({ step }) => {
+        await step.run("fetch-and-save-new-movies", async () => {
+            if (!process.env.TMDB_API_KEY) return;
+            try {
+                // Fetch Now Playing movies from TMDB
+                const response = await axios.get(`https://api.tmdb.org/3/movie/now_playing?api_key=${process.env.TMDB_API_KEY}&language=en-US&page=1`);
+                const tmdbMovies = response.data.results;
+                
+                for (const tmdb of tmdbMovies) {
+                    // Check if movie already exists (TMDB ID instead of IMDB ID here, but let's try to find by title to avoid duplicates since we use IMDB ID as _id)
+                    const existingMovie = await Movie.findOne({ title: tmdb.title });
+                    if (!existingMovie) {
+                        // We will save it with TMDB ID prefixed if IMDB ID is not readily available, or just fetch external ID
+                        const extRes = await axios.get(`https://api.tmdb.org/3/movie/${tmdb.id}/external_ids?api_key=${process.env.TMDB_API_KEY}`);
+                        const imdbId = extRes.data.imdb_id || `tmdb-${tmdb.id}`;
+                        
+                        // We need genres - TMDB uses genre IDs, let's just save generic strings for simplicity
+                        const genresMap = { 28: "Action", 12: "Adventure", 16: "Animation", 35: "Comedy", 80: "Crime", 99: "Documentary", 18: "Drama", 10751: "Family", 14: "Fantasy", 36: "History", 27: "Horror", 10402: "Music", 9648: "Mystery", 10749: "Romance", 878: "Science Fiction", 10770: "TV Movie", 53: "Thriller", 10752: "War", 37: "Western" };
+                        const movieGenres = tmdb.genre_ids.map(id => genresMap[id]).filter(Boolean);
+
+                        const newMovie = new Movie({
+                            _id: imdbId,
+                            title: tmdb.title,
+                            overview: tmdb.overview,
+                            poster_path: `https://image.tmdb.org/t/p/w500${tmdb.poster_path}`,
+                            backdrop_path: `https://image.tmdb.org/t/p/w1280${tmdb.backdrop_path}`,
+                            release_date: tmdb.release_date,
+                            original_language: tmdb.original_language,
+                            vote_average: tmdb.vote_average,
+                            genres: movieGenres,
+                            casts: [], // TMDB casts require another API call
+                            runtime: 120 // Default runtime
+                        });
+                        
+
+                        await newMovie.save();
+                    }
+                }
+            } catch (error) {
+                console.error("Error syncing new movies:", error.message);
+            }
+        });
+        return { message: "Sync complete" };
+    }
+);
+
 // Create an empty array where we'll export future Inngest functions
 export const functions = [
     syncUserCreation,
@@ -236,5 +330,7 @@ export const functions = [
     releaseSeatsAndDeleteBooking,
     sendBookingConfirmationEmail,
     sendShowReminders,
-    sendNewShowNotifications
+    sendNewShowNotifications,
+    updateDynamicPricing,
+    syncNewMovies
 ];

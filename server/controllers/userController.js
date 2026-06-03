@@ -1,17 +1,28 @@
 import { clerkClient } from "@clerk/express";
 import Booking from "../models/Booking.js";
 import Movie from "../models/Movie.js";
-import { err } from "inngest/types";
+import { randomUUID } from "crypto";
+
 
 // API Controller Function to Get User Bookings
 export const getUserBookings = async (req, res) => {
     try {
         const user = req.auth().userId;
 
-        const bookings = await Booking.find({ user }).populate({
+        let bookings = await Booking.find({ user }).populate({
             path: "show",
             populate: { path: "movie" }
         }).sort({ createdAt: -1 })
+
+        // Backfill qrToken for existing bookings that don't have it
+        let modified = false;
+        for (let i = 0; i < bookings.length; i++) {
+            if (!bookings[i].qrToken) {
+                bookings[i].qrToken = randomUUID();
+                await bookings[i].save();
+                modified = true;
+            }
+        }
 
         res.json({ success: true, bookings })
     } catch (error) {
@@ -49,13 +60,12 @@ export const updateFavorite = async (req, res) => {
 }
 
 // get the list of all favourite movies
-
 export const getFavorite = async(req,res) => {
     try {
         const user = await clerkClient.users.getUser(req.auth().userId)
         const favorites = user.privateMetadata.favorites;
 
-        //Getting movies from database 
+        //Getting movies from database
         const movies = await Movie.find({_id:{$in: favorites}});
 
         res.json({success: true, movies})

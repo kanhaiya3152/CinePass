@@ -2,59 +2,69 @@ import axios from "axios";
 import Movie from "../models/Movie.js";
 import Show from "../models/Show.js";
 import { inngest } from "../inngest/index.js";
+import redisClient from "../configs/redis.js";
 
-const TRAKT_CLIENT_ID = process.env.TRAKT_CLIENT_ID;
-const OMDB_KEY = process.env.OMDB_KEY;
+const TMDB_KEY = process.env.TMDB_API_KEY;
+const TMDB_BASE = "https://api.tmdb.org/3";
+const TMDB_IMG = "https://image.tmdb.org/t/p";
+
+// Helper: map TMDB genre IDs to names
+const GENRE_MAP = { 28:"Action",12:"Adventure",16:"Animation",35:"Comedy",80:"Crime",99:"Documentary",18:"Drama",10751:"Family",14:"Fantasy",36:"History",27:"Horror",10402:"Music",9648:"Mystery",10749:"Romance",878:"Science Fiction",10770:"TV Movie",53:"Thriller",10752:"War",37:"Western" };
 
 export const getNowPlayingMovies = async (req, res) => {
     try {
-        // 1. Fetch trending movies from Trakt
-        const traktRes = await axios.get("https://api.trakt.tv/movies/trending", {
-            headers: {
-                "Content-Type": "application/json",
-                "trakt-api-version": "2",
-                "trakt-api-key": TRAKT_CLIENT_ID
+        if (!TMDB_KEY) {
+            return res.status(400).json({ success: false, message: "TMDB_API_KEY is not configured" });
+        }
+
+        // Check Redis Cache first
+        if (redisClient.isReady) {
+            const cachedMovies = await redisClient.get('now_playing_movies');
+            if (cachedMovies) {
+                console.log("Serving movies from Redis Cache");
+                return res.json({ success: true, movies: JSON.parse(cachedMovies) });
             }
-        });
+        }
 
-        const traktData = traktRes.data;
-        const movies = [];
+        console.log("Fetching movies from TMDB API");
+        // Fetch now_playing + upcoming from TMDB for a full list
 
-        for (const item of traktData) {
-            const imdbID = item.movie.ids.imdb;
+        const [nowRes, upcomingRes] = await Promise.all([
+            axios.get(`${TMDB_BASE}/movie/now_playing?api_key=${TMDB_KEY}&language=en-US&page=1`),
+            axios.get(`${TMDB_BASE}/movie/upcoming?api_key=${TMDB_KEY}&language=en-US&page=1`),
+        ]);
 
-            if (!imdbID) continue;
+        const combined = [...nowRes.data.results, ...upcomingRes.data.results];
 
-            // 2. Fetch detailed movie info from OMDb using IMDb ID
-            const omdbRes = await axios.get(`http://www.omdbapi.com/?i=${imdbID}&apikey=${OMDB_KEY}`);
-            const omdbData = omdbRes.data;
+        // Deduplicate by TMDB id
+        const seen = new Set();
+        const unique = combined.filter(m => { if (seen.has(m.id)) return false; seen.add(m.id); return true; });
 
-            if (omdbData.Response === "False") {
-                console.warn(`OMDb error for ${imdbID}: ${omdbData.Error}`);
-                continue;
-            }
+        const movies = unique.slice(0, 30).map(m => ({
+            id: String(m.id),  // use TMDB id as the movie id
+            title: m.title,
+            overview: m.overview,
+            poster_path: m.poster_path ? `${TMDB_IMG}/w500${m.poster_path}` : "",
+            backdrop_path: m.backdrop_path ? `${TMDB_IMG}/w1280${m.backdrop_path}` : "",
+            release_date: m.release_date,
+            original_language: m.original_language,
+            tagline: "",
+            genres: (m.genre_ids || []).map(id => GENRE_MAP[id]).filter(Boolean),
+            vote_average: m.vote_average || 0,
+            vote_count: m.vote_count || 0,
+            runtime: 0,
+        }));
 
-            // 3. Push movie object to response array
-            movies.push({
-                id: omdbData.imdbID,
-                title: omdbData.Title,
-                overview: omdbData.Plot,
-                poster_path: omdbData.Poster,
-                backdrop_path: "", // OMDb doesn't provide this
-                release_date: omdbData.Released,
-                original_language: omdbData.Language,
-                tagline: "", // OMDb doesn't provide this
-                genres: omdbData.Genre.split(", "),
-                casts: omdbData.Actors.split(", "),
-                vote_average: parseFloat(omdbData.imdbRating) || 0,
-                runtime: parseInt(omdbData.Runtime) || 0
-            });
+        // Store in Redis with an expiration of 30 minutes (1800 seconds)
+        if (redisClient.isReady) {
+            await redisClient.setEx('now_playing_movies', 1800, JSON.stringify(movies));
         }
 
         res.json({ success: true, movies });
+
     } catch (error) {
-        console.error("❌ Error fetching trending movies:", error.message);
-        res.status(500).json({ success: false, message: "Failed to fetch movies from Trakt/OMDb" });
+        console.error("Error fetching TMDB movies:", error.message);
+        res.status(500).json({ success: false, message: "Failed to fetch movies from TMDB" });
     }
 };
 
@@ -67,34 +77,45 @@ export const addShow = async (req, res) => {
         // Check if movie already exists
         let movie = await Movie.findById(movieId);
 
-        // If movie doesn't exist, fetch and save it
+        // If movie doesn't exist, fetch from TMDB and save it
         if (!movie) {
-            // 1. Fetch movie details from OMDb using IMDb ID
-            const omdbRes = await axios.get(`http://www.omdbapi.com/?i=${movieId}&apikey=${OMDB_KEY}`);
-            const omdbData = omdbRes.data;
-
-            if (omdbData.Response === "False") {
-                return res.status(404).json({ success: false, message: `Movie not found: ${omdbData.Error}` });
+            if (!TMDB_KEY) {
+                return res.status(400).json({ success: false, message: "TMDB_API_KEY is not configured" });
             }
 
-            // 2. Save new movie to DB
+            // 1. Fetch full movie details from TMDB
+            const [detailsRes, creditsRes] = await Promise.all([
+                axios.get(`${TMDB_BASE}/movie/${movieId}?api_key=${TMDB_KEY}&language=en-US`),
+                axios.get(`${TMDB_BASE}/movie/${movieId}/credits?api_key=${TMDB_KEY}&language=en-US`),
+            ]);
+
+            const m = detailsRes.data;
+            if (!m || !m.id) {
+                return res.status(404).json({ success: false, message: "Movie not found on TMDB" });
+            }
+
+            const casts = (creditsRes.data.cast || []).slice(0, 8).map(c => c.name);
+            const genres = (m.genres || []).map(g => g.name);
+
+
+            // 3. Save new movie to DB
             movie = new Movie({
-                _id: omdbData.imdbID,
-                title: omdbData.Title,
-                overview: omdbData.Plot,
-                poster_path: omdbData.Poster,
-                backdrop_path: "", // OMDb doesn't provide this
-                release_date: omdbData.Released,
-                original_language: omdbData.Language,
-                tagline: "", // Optional
-                genres: omdbData.Genre?.split(", ") || [],
-                casts: omdbData.Actors?.split(", ") || [],
-                vote_average: parseFloat(omdbData.imdbRating) || 0,
-                runtime: parseInt(omdbData.Runtime) || 0
+                _id: String(m.id),
+                title: m.title,
+                overview: m.overview,
+                poster_path: m.poster_path ? `${TMDB_IMG}/w500${m.poster_path}` : "",
+                backdrop_path: m.backdrop_path ? `${TMDB_IMG}/w1280${m.backdrop_path}` : "",
+                release_date: m.release_date,
+                original_language: m.original_language,
+                tagline: m.tagline || "",
+                genres,
+                casts,
+                vote_average: m.vote_average || 0,
+                runtime: m.runtime || 0
             });
 
             await movie.save();
-            console.log(`🎬 New movie saved: ${movie.title}`);
+            console.log(`New movie saved: ${movie.title}`);
         }
 
         // 3. Save the show for the movie
@@ -121,6 +142,11 @@ export const addShow = async (req, res) => {
             data:{movieTitle: movie.title}
         })
 
+        // Invalidate 'all_shows' cache
+        if (redisClient.isReady) {
+            await redisClient.del('all_shows');
+        }
+
         res.status(201).json({ success: true, message: "Show added successfully" });
     } catch (error) {
         console.error("Error in addShow:", error.message);
@@ -131,12 +157,39 @@ export const addShow = async (req, res) => {
 // API to get all shows from the database I
 export const getShows = async (req, res) => {
     try {
+        // Check Redis Cache first
+        if (redisClient.isReady) {
+            const cachedShows = await redisClient.get('all_shows');
+            if (cachedShows) {
+                console.log("Serving all shows from Redis Cache");
+                return res.json({ success: true, shows: JSON.parse(cachedShows) });
+            }
+        }
+
+        console.log("Fetching all shows from MongoDB");
         const shows = await Show.find({ showDateTime: { $gte: new Date() } }).populate('movie').sort({ showDateTime: 1 });
 
         // filter unique shows
         const uniqueShows = new Set(shows.map(show => show.movie))
+        const finalShows = Array.from(uniqueShows);
 
-        res.json({ success: true, shows: Array.from(uniqueShows) })
+        // Store in Redis with an expiration of 15 minutes (900 seconds)
+        if (redisClient.isReady) {
+            await redisClient.setEx('all_shows', 900, JSON.stringify(finalShows));
+        }
+
+        res.json({ success: true, shows: finalShows })
+    } catch (error) {
+        console.error(error);
+        res.json({ success: false, message: error.message });
+    }
+}
+
+// API to get all movies sorted by release date
+export const getMovies = async (req, res) => {
+    try {
+        const movies = await Movie.find({}).sort({ release_date: -1 }).limit(20);
+        res.json({ success: true, movies });
     } catch (error) {
         console.error(error);
         res.json({ success: false, message: error.message });
@@ -159,7 +212,7 @@ export const getShow = async (req, res) => {
             if (!dateTime[date]) {
                 dateTime[date] = []
             }
-            dateTime[date].push({ time: show.showDateTime, showId: show._id })
+            dateTime[date].push({ time: show.showDateTime, showId: show._id, price: show.showPrice })
         })
         res.json({success:true, movie, dateTime})
     } catch (error) {

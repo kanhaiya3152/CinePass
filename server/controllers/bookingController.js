@@ -1,7 +1,8 @@
 import { inngest } from "../inngest/index.js";
 import Booking from "../models/Booking.js";
 import Show from "../models/Show.js";
-import stripe from 'stripe'
+import stripe from 'stripe';
+import { randomUUID } from 'crypto';
 
 // Function to check availability of selected seats for a movie
 
@@ -37,12 +38,13 @@ export const createBooking = async (req, res) => {
         // Get the show details
         const showData = await Show.findById(showId).populate('movie');
 
-        // Create a new booking
+        // Create a new booking with a unique QR token right away
         const booking = await Booking.create({
             user: userId,
             show: showId,
             amount: showData.showPrice * selectedSeats.length,
-            bookedSeats: selectedSeats
+            bookedSeats: selectedSeats,
+            qrToken: randomUUID()
         })
 
         selectedSeats.map((seat) => {
@@ -101,17 +103,45 @@ export const createBooking = async (req, res) => {
 
 export const getOccupiedSeats = async (req, res) => {
     try {
-
         const { showId } = req.params;
-
         const showData = await Show.findById(showId)
-
         const occupiedSeats = Object.keys(showData.occupiedSeats)
-
         res.json({ success: true, occupiedSeats })
-
     } catch (error) {
         console.log(error.message);
         res.json({ success: false, message: error.message });
     }
 }
+
+// Verify a ticket by its QR token (used by admin scanner)
+export const verifyTicket = async (req, res) => {
+    try {
+        const { token } = req.params;
+        const booking = await Booking.findOne({ qrToken: token }).populate({
+            path: 'show',
+            populate: { path: 'movie' }
+        });
+
+        if (!booking) {
+            return res.json({ success: false, message: 'Invalid or unknown QR code' });
+        }
+        if (!booking.isPaid) {
+            return res.json({ success: false, message: 'Ticket not paid' });
+        }
+
+        res.json({
+            success: true,
+            ticket: {
+                bookingId: booking._id,
+                movie: booking.show.movie.title,
+                poster: booking.show.movie.poster_path,
+                showDateTime: booking.show.showDateTime,
+                seats: booking.bookedSeats,
+                amount: booking.amount
+            }
+        });
+    } catch (error) {
+        console.log(error.message);
+        res.json({ success: false, message: error.message });
+    }
+}

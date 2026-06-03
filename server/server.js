@@ -2,6 +2,7 @@ import express from 'express'
 import cors from 'cors'
 import 'dotenv/config'
 import connectDB from './configs/db.js';
+import { connectRedis } from './configs/redis.js';
 import { clerkMiddleware } from '@clerk/express'
 import { serve } from "inngest/express";
 import { inngest, functions } from "./inngest/index.js"
@@ -10,7 +11,6 @@ import bookingRouter from './routes/bookingRoutes.js';
 import adminRouter from './routes/adminRoutes.js';
 import userRouter from './routes/userRoutes.js';
 import { stripeWebhooks } from './controllers/stripeWebhooks.js';
-
 
 const app = express(); 
 const port = process.env.PORT || 5000;
@@ -25,6 +25,7 @@ app.use(clerkMiddleware())
 
 
 await connectDB()
+await connectRedis()
 
 // API Routes
 app.get('/' , (req,res)=>{res.send("Welcome to my backend")})

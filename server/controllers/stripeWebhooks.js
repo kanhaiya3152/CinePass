@@ -1,6 +1,7 @@
 import stripe from "stripe";
 import Booking from "../models/Booking.js";
 import { inngest } from "../inngest/index.js";
+import { randomUUID } from "crypto";
 
 export const stripeWebhooks = async (request, response) => {
 
@@ -25,9 +26,10 @@ export const stripeWebhooks = async (request, response) => {
                 const session = sessionList.data[0];
                 const { bookingId } = session.metadata;
                 
-                await Booking.findByIdAndUpdate(bookingId,{
-                    isPaid:true,
-                    paymentLink:""
+                await Booking.findByIdAndUpdate(bookingId, {
+                    isPaid: true,
+                    paymentLink: "",
+                    qrToken: randomUUID()
                 })
 
                 // Send confirmation mail

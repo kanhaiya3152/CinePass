@@ -6,7 +6,8 @@ const bookingSchema = new mongoose.Schema({
     amount:{ type:Number, required:true },
     bookedSeats: { type: Array, required: true },
     isPaid:  {type: Boolean, default: false },
-    paymentLink:{ type:  String,}
+    paymentLink:{ type: String },
+    qrToken: { type: String, unique: true, sparse: true }
 }, { timestamps: true })
 
 

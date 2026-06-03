@@ -56,3 +56,66 @@ export const getAllBookings = async (req, res) => {
         res.json({ success: false, message: error.message })
     }
 }
+
+// API to delete a movie and all its shows
+export const deleteMovie = async (req, res) => {
+    try {
+        const { id } = req.params;
+        
+        // Find all shows for this movie
+        const shows = await Show.find({ movie: id });
+        const showIds = shows.map(s => s._id);
+
+        // Delete all related bookings (optional but keeps DB clean)
+        await Booking.deleteMany({ show: { $in: showIds } });
+
+        // Delete all shows
+        await Show.deleteMany({ movie: id });
+
+        // Delete the movie
+        await Movie.findByIdAndDelete(id);
+
+        res.json({ success: true, message: "Movie and all related shows deleted completely." });
+    } catch (error) {
+        console.error(error);
+        res.json({ success: false, message: error.message });
+    }
+}
+
+// API to delete a specific show
+export const deleteShow = async (req, res) => {
+    try {
+        const { id } = req.params;
+
+        // Delete bookings for this show
+        await Booking.deleteMany({ show: id });
+
+        // Delete the show
+        await Show.findByIdAndDelete(id);
+
+        res.json({ success: true, message: "Show deleted successfully." });
+    } catch (error) {
+        console.error(error);
+        res.json({ success: false, message: error.message });
+    }
+}
+
+// API to update a show's time and price
+export const updateShow = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { date, time, showPrice } = req.body;
+
+        const dateTimeString = `${date}T${time}`;
+        
+        await Show.findByIdAndUpdate(id, {
+            showDateTime: new Date(dateTimeString),
+            showPrice: Number(showPrice)
+        });
+
+        res.json({ success: true, message: "Show updated successfully." });
+    } catch (error) {
+        console.error(error);
+        res.json({ success: false, message: error.message });
+    }
+}
