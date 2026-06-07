@@ -1,6 +1,8 @@
 import Booking from "../models/Booking.js";
+import Movie from "../models/Movie.js";
 import Show from "../models/Show.js";
 import User from "../models/Users.js";
+import redisClient from "../configs/redis.js";
 
 
 // API to check if user is admin
@@ -75,6 +77,10 @@ export const deleteMovie = async (req, res) => {
         // Delete the movie
         await Movie.findByIdAndDelete(id);
 
+        if (redisClient.isReady) {
+            await redisClient.del('all_shows');
+        }
+
         res.json({ success: true, message: "Movie and all related shows deleted completely." });
     } catch (error) {
         console.error(error);
@@ -92,6 +98,10 @@ export const deleteShow = async (req, res) => {
 
         // Delete the show
         await Show.findByIdAndDelete(id);
+
+        if (redisClient.isReady) {
+            await redisClient.del('all_shows');
+        }
 
         res.json({ success: true, message: "Show deleted successfully." });
     } catch (error) {
@@ -112,6 +122,10 @@ export const updateShow = async (req, res) => {
             showDateTime: new Date(dateTimeString),
             showPrice: Number(showPrice)
         });
+
+        if (redisClient.isReady) {
+            await redisClient.del('all_shows');
+        }
 
         res.json({ success: true, message: "Show updated successfully." });
     } catch (error) {
