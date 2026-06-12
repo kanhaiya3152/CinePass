@@ -11,6 +11,7 @@ const TMDB_IMG = "https://image.tmdb.org/t/p";
 // Helper: map TMDB genre IDs to names
 const GENRE_MAP = { 28:"Action",12:"Adventure",16:"Animation",35:"Comedy",80:"Crime",99:"Documentary",18:"Drama",10751:"Family",14:"Fantasy",36:"History",27:"Horror",10402:"Music",9648:"Mystery",10749:"Romance",878:"Science Fiction",10770:"TV Movie",53:"Thriller",10752:"War",37:"Western" };
 
+// first 30 movies fetching from the TMDB api and stores it to the Redis
 export const getNowPlayingMovies = async (req, res) => {
     try {
         if (!TMDB_KEY) {
@@ -36,7 +37,7 @@ export const getNowPlayingMovies = async (req, res) => {
 
         const combined = [...nowRes.data.results, ...upcomingRes.data.results];
 
-        // Deduplicate by TMDB id
+        // Deduplicate by TMDB id(for removing the duplicate id we declare the set)
         const seen = new Set();
         const unique = combined.filter(m => { if (seen.has(m.id)) return false; seen.add(m.id); return true; });
 
@@ -188,7 +189,7 @@ export const getShows = async (req, res) => {
 // API to get all movies sorted by release date
 export const getMovies = async (req, res) => {
     try {
-        const movies = await Movie.find({}).sort({ release_date: -1 }).limit(20);
+        const movies = await Movie.find({}).sort({ release_date: -1 }).limit(18);
         res.json({ success: true, movies });
     } catch (error) {
         console.error(error);
