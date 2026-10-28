@@ -5,6 +5,7 @@ import Show from "../models/Show.js";
 import Movie from "../models/Movie.js";
 import sendEmail from "../configs/nodemailer.js";
 import axios from "axios";
+import Stripe from "stripe";
 
 // Create a client to send and receive events
 export const inngest = new Inngest({ id: "movie-ticket-booking" });
@@ -64,19 +65,46 @@ const releaseSeatsAndDeleteBooking = inngest.createFunction(
 
         await step.run('check-payment-status', async () => {
             const bookingId = event.data.bookingId;
-            const booking = await Booking.findById(bookingId)
+            const booking = await Booking.findById(bookingId);
+            if (!booking) return;
+
+            // Before deleting, check if payment was completed on Stripe
+            if (!booking.isPaid && (booking.sessionId || booking.paymentLink)) {
+                try {
+                    const stripeKey = process.env.STRIPE_SECRET_KEY;
+                    if (stripeKey) {
+                        const stripe = new Stripe(stripeKey);
+                        let sessionId = booking.sessionId;
+                        if (!sessionId && booking.paymentLink) {
+                            const match = booking.paymentLink.match(/(cs_[a-zA-Z0-9_]+)/);
+                            if (match) sessionId = match[1];
+                        }
+                        if (sessionId) {
+                            const session = await stripe.checkout.sessions.retrieve(sessionId);
+                            if (session && session.payment_status === 'paid') {
+                                booking.isPaid = true;
+                                booking.paymentLink = '';
+                                await booking.save();
+                                return;
+                            }
+                        }
+                    }
+                } catch (e) {
+                    console.error('Stripe check error in Inngest:', e.message);
+                }
+            }
 
             // If payment is not made, release seats and delete booking
             if (!booking.isPaid) {
                 const show = await Show.findById(booking.show);
-
-                booking.bookedSeats.forEach((seat) => {
-                    delete show.occupiedSeats[seat]
-                });
-
-                show.markModified('occupiedSeats')
-                await show.save()
-                await Booking.findByIdAndDelete(booking._id)
+                if (show && show.occupiedSeats) {
+                    booking.bookedSeats.forEach((seat) => {
+                        delete show.occupiedSeats[seat];
+                    });
+                    show.markModified('occupiedSeats');
+                    await show.save();
+                }
+                await Booking.findByIdAndDelete(booking._id);
             }
         })
     }

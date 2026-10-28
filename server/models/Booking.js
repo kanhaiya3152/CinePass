@@ -7,10 +7,10 @@ const bookingSchema = new mongoose.Schema({
     bookedSeats: { type: Array, required: true },
     isPaid:  {type: Boolean, default: false },
     paymentLink:{ type: String },
+    sessionId: { type: String },
     qrToken: { type: String, unique: true, sparse: true }
 }, { timestamps: true })
 
-
 const Booking = mongoose.model("Booking", bookingSchema);
 
-export default Booking
+export default Booking;

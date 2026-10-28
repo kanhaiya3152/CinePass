@@ -35,4 +35,10 @@ app.use('/api/booking', bookingRouter)
 app.use('/api/admin', adminRouter)
 app.use('/api/user', userRouter)
 
+if (!process.env.VERCEL) {
+    app.listen(port, () => 
+        console.log(`Server running at http://localhost:${port}`)
+    );
+}
+
 export default app;
